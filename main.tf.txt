@@ -1,0 +1,107 @@
+# Define VPC
+resource "aws_vpc" "main" {
+  cidr_block = var.vpc_cidr
+  enable_dns_hostnames = true
+  enable_dns_support   = true
+  instance_tenancy = "default"
+  tags = {
+    Name = "Test VPC"
+  }
+}
+# Define the private subnet
+resource "aws_subnet" "private-subnet" {
+  vpc_id = "${aws_vpc.main.id}"
+  cidr_block = var.private_subnet_cidr
+  availability_zone = "us-east-2b"
+
+  tags = {
+    Name = "Private Subnet"
+  }
+}
+# Define the public subnet
+resource "aws_subnet" "public-subnet" {
+  vpc_id = "${aws_vpc.main.id}"
+  cidr_block = var.public_subnet_cidr
+  map_public_ip_on_launch = true
+  availability_zone = "us-east-2b"
+
+  tags = {
+    Name = "Public Subnet"
+  }
+}
+#Creating instance inside the subnet
+resource "aws_instance" "firstEC2" {
+ ami="ami-0a91cd140a1fc148a"
+ instance_type="t2.micro"
+key_name     ="dec07"
+ associate_public_ip_address = "true"
+ subnet_id ="${aws_subnet.public-subnet.id}"
+ vpc_security_group_ids = ["${aws_default_security_group.default_myfirst.id}"]
+ source_dest_check =false
+ tags = {
+  Name = "Terraform apache2-webserver"
+}
+ user_data = file("./install.sh")
+}
+
+
+# Define the internet gateway
+resource "aws_internet_gateway" "igw" {
+  vpc_id = "${aws_vpc.main.id}"
+
+  tags = {
+    Name = "VPC Internet Gateway"
+  }
+}
+# Define public Route Table
+ resource "aws_route_table" "public-route-table" {
+  vpc_id = "${aws_vpc.main.id}"
+
+  route {
+    cidr_block = "0.0.0.0/0"
+    gateway_id = "${aws_internet_gateway.igw.id}"
+  }
+
+  tags = {
+    Name = "Public Subnet RT"
+  }
+}
+
+# Route table association with public subnet
+resource "aws_route_table_association" "connect-public-rt" {
+  subnet_id = "${aws_subnet.public-subnet.id}"
+  route_table_id = "${aws_route_table.public-route-table.id}"
+}
+# Creating security Group for public subnet
+resource "aws_default_security_group" "default_myfirst" {
+ ingress {
+ from_port = 0
+ to_port = 0
+ protocol = "-1"
+ cidr_blocks = ["0.0.0.0/0"]
+ }
+ egress {
+ from_port = 0
+ to_port = 0
+ protocol = "-1"
+ cidr_blocks = ["0.0.0.0/0"]
+ }
+ vpc_id = "${aws_vpc.main.id}"
+ tags = {
+ Name = "myfirstsecuritygroup"
+ }
+}
+#create a network interface
+resource "aws_network_interface" "first" {
+ subnet_id = "${aws_subnet.public-subnet.id}"
+ tags = {
+ Name = "mynetworkinterface"
+ }
+}
+#connecting instance through network interface
+resource "aws_network_interface_attachment" "connect" {
+ instance_id = "${aws_instance.firstEC2.id}"
+ network_interface_id = "${aws_network_interface.first.id}"
+ device_index = 1
+}
+
